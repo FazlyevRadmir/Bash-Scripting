@@ -1,0 +1,98 @@
+# Task 5
+
+set -euo pipefail
+
+source_dir=''
+archive_name=''
+
+while getopts ':d:n:' opt; do
+    case "$opt" in
+        d) source_dir=$OPTARG ;;
+        n) archive_name=$OPTARG ;;
+        :)
+            printf 'Ошибка: у -%s отсутствует значение.\n' "$OPTARG" >&2
+            exit 1
+            ;;
+        *)
+            printf 'Ошибка: неизвестная опция.\n' >&2
+            exit 1
+            ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+
+if [[ -z $source_dir || -z $archive_name || $# -ne 0 ]]; then
+    printf 'Использование: %s -d каталог -n имя\n' "$0" >&2
+    exit 1
+fi
+
+if [[ ! -d $source_dir ]]; then
+    printf 'Ошибка: каталог не найден: %s\n' "$source_dir" >&2
+    exit 1
+fi
+
+if [[ $archive_name == */* || $archive_name == . || $archive_name == .. ]]; then
+    printf 'Ошибка: укажите имя файла без пути.\n' >&2
+    exit 1
+fi
+
+if [[ -e $archive_name || -L $archive_name ]]; then
+    printf 'Ошибка: файл %s уже существует.\n' "$archive_name" >&2
+    exit 1
+fi
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/mkarch.XXXXXX")
+
+trap 'rm -f "$tmp"' EXIT
+
+tar -czf "$tmp" -C "$source_dir" .
+
+cat > "./$archive_name" <<'UNPACK'
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+destination='.'
+
+while getopts ':o:' opt; do
+    case "$opt" in
+        o) destination=$OPTARG ;;
+        :)
+            printf 'Ошибка: после -o укажите каталог.\n' >&2
+            exit 1
+            ;;
+        *)
+            printf 'Ошибка: неизвестная опция.\n' >&2
+            exit 1
+            ;;
+    esac
+done
+
+shift $((OPTIND - 1))
+
+if [[ $# -ne 0 || -z $destination ]]; then
+    printf 'Использование: %s [-o каталог]\n' "$0" >&2
+    exit 1
+fi
+
+mkdir -p "$destination"
+
+if base64 -d </dev/null >/dev/null 2>&1; then
+    sed '1,/^__ARCHIVE_BELOW__$/d' "$0" | base64 -d | tar -xz -C "$destination"
+else
+    sed '1,/^__ARCHIVE_BELOW__$/d' "$0" | base64 -D | tar -xz -C "$destination"
+fi
+
+printf 'Архив распакован в: %s\n' "$destination"
+
+exit 0
+UNPACK
+
+printf '__ARCHIVE_BELOW__\n' >> "./$archive_name"
+
+base64 < "$tmp" >> "./$archive_name"
+
+chmod a+x "./$archive_name"
+
+printf 'Самораспаковывающийся архив создан: %s\n' "$archive_name"

@@ -1,0 +1,163 @@
+# Task 4
+
+trap 'printf "\nДля выхода из игры введите q или Q.\n"' INT
+
+A=(8 7 6 5 4 3 2 1)
+B=()
+C=()
+turn=1
+
+
+print_towers() {
+    local level a b c
+
+    printf '\n'
+
+    for ((level = 7; level >= 0; level--)); do
+        a=' ' b=' ' c=' '
+
+        if ((level < ${#A[@]})); then
+            a=${A[level]}
+        fi
+
+        if ((level < ${#B[@]})); then
+            b=${B[level]}
+        fi
+
+        if ((level < ${#C[@]})); then
+            c=${C[level]}
+        fi
+
+        printf ' |%s|  |%s|  |%s|\n' "$a" "$b" "$c"
+    done
+
+    printf ' +-+  +-+  +-+\n'
+    printf '  A    B    C\n'
+}
+
+is_complete() {
+    local name=$1 i
+    local tower=()
+
+    case $name in
+        B) tower=("${B[@]}") ;;
+        C) tower=("${C[@]}") ;;
+        *) return 1 ;;
+    esac
+
+    ((${#tower[@]} == 8)) || return 1
+
+    for ((i = 0; i < 8; i++)); do
+        ((tower[i] == 8 - i)) || return 1
+    done
+
+    return 0
+}
+
+move_disk() {
+    local source_name=$1
+    local destination_name=$2
+    local disk top last
+
+    local source_stack=()
+    local destination_stack=()
+
+    case $source_name in
+        A) source_stack=("${A[@]}") ;;
+        B) source_stack=("${B[@]}") ;;
+        C) source_stack=("${C[@]}") ;;
+    esac
+
+    case $destination_name in
+        A) destination_stack=("${A[@]}") ;;
+        B) destination_stack=("${B[@]}") ;;
+        C) destination_stack=("${C[@]}") ;;
+    esac
+
+    if ((${#source_stack[@]} == 0)); then
+        printf 'Такое перемещение запрещено! Стек %s пуст.\n' "$source_name"
+        return 1
+    fi
+
+    last=$((${#source_stack[@]} - 1))
+    disk=${source_stack[last]}
+
+    if ((${#destination_stack[@]} > 0)); then
+        top=${destination_stack[${#destination_stack[@]} - 1]}
+
+        if ((disk > top)); then
+            printf 'Такое перемещение запрещено! Нельзя положить %d на %d.\n' "$disk" "$top"
+            return 1
+        fi
+    fi
+
+    unset "source_stack[$last]"
+    destination_stack+=("$disk")
+
+    case $source_name in
+        A) A=("${source_stack[@]}") ;;
+        B) B=("${source_stack[@]}") ;;
+        C) C=("${source_stack[@]}") ;;
+    esac
+
+    case $destination_name in
+        A) A=("${destination_stack[@]}") ;;
+        B) B=("${destination_stack[@]}") ;;
+        C) C=("${destination_stack[@]}") ;;
+    esac
+
+    return 0
+}
+
+printf 'Ханойская башня. Перенесите все диски из A в B или C.\n'
+printf 'Введите два имени стеков (AB или A B). Для выхода: q.\n'
+
+while true; do
+    print_towers
+
+    if IFS= read -r -p "Ход № $turn (откуда, куда): " input; then
+        :
+    else
+        read_status=$?
+
+        if ((read_status > 128)); then
+            continue
+        fi
+
+        printf '\nВвод завершён.\n'
+        exit 1
+    fi
+
+    input=$(printf '%s' "$input" | tr '[:lower:]' '[:upper:]')
+    input=${input//[[:space:]]/}
+
+    if [[ $input == Q ]]; then
+        printf 'Игра завершена.\n'
+        exit 1
+    fi
+
+    if [[ ! $input =~ ^[ABC][ABC]$ ]]; then
+        printf 'Ошибка ввода! Введите AB, A B, AC, BC и т. д. или q.\n'
+        continue
+    fi
+
+    source_name=${input:0:1}
+    destination_name=${input:1:1}
+
+    if [[ $source_name == "$destination_name" ]]; then
+        printf 'Такое перемещение запрещено! Укажите два разных стека.\n'
+        continue
+    fi
+
+    if ! move_disk "$source_name" "$destination_name"; then
+        continue
+    fi
+
+    if is_complete B || is_complete C; then
+        printf '\nВы победили! Башня собрана за %d ходов.\n' "$turn"
+        print_towers
+        exit 0
+    fi
+
+    ((turn += 1))
+done

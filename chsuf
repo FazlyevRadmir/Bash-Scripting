@@ -1,0 +1,77 @@
+# Task 7
+
+usage() {
+    printf 'Использование: %s каталог старый_суффикс новый_суффикс\n' "$0" >&2
+}
+
+if (( $# != 3 )); then
+    usage
+    exit 1
+fi
+
+dirpath=$1
+old_suffix=$2
+new_suffix=$3
+
+if [[ ! -d $dirpath ]]; then
+    printf 'Ошибка: каталог не найден: %s\n' "$dirpath" >&2
+    exit 1
+fi
+
+valid_suffix() {
+    [[ $1 =~ ^\.[^.]+$ && $1 != */* ]]
+}
+
+if ! valid_suffix "$old_suffix"; then
+    printf 'Ошибка: неправильный старый суффикс: %s\n' "$old_suffix" >&2
+    exit 1
+fi
+
+if ! valid_suffix "$new_suffix"; then
+    printf 'Ошибка: неправильный новый суффикс: %s\n' "$new_suffix" >&2
+    exit 1
+fi
+
+if [[ $old_suffix == "$new_suffix" ]]; then
+    printf 'Суффиксы одинаковые. Переименовывать нечего.\n'
+    exit 0
+fi
+
+absdir=$(cd "$dirpath" && pwd -P) || exit 1
+
+renamed=0
+skipped=0
+errors=0
+
+while IFS= read -r -d '' file; do
+
+    name=${file##*/}
+
+    [[ $name == *"$old_suffix" ]] || continue
+
+    prefix=${name:0:${#name}-${#old_suffix}}
+
+    [[ -n $prefix ]] || continue
+
+    new_file=${file/%"$old_suffix"/"$new_suffix"}
+
+    if [[ -e $new_file || -L $new_file ]]; then
+        printf 'Пропущено (уже существует): %s\n' "$new_file" >&2
+        ((skipped += 1))
+        continue
+    fi
+
+    if mv "$file" "$new_file"; then
+        printf 'Переименовано: %s -> %s\n' "$file" "$new_file"
+        ((renamed += 1))
+    else
+        printf 'Ошибка переименования: %s\n' "$file" >&2
+        ((errors += 1))
+    fi
+
+done < <(find "$absdir" -type f -print0)
+
+printf 'Готово. Переименовано: %d, пропущено: %d, ошибок: %d.\n' \
+    "$renamed" "$skipped" "$errors"
+
+((errors == 0))

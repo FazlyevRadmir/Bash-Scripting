@@ -1,0 +1,134 @@
+# Task 3
+
+board=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 0)
+empty=15
+moves=0
+
+get_neighbors() {
+    local pos=$1
+    local row=$((pos / 4))
+    local col=$((pos % 4))
+    neighbors=()
+
+    if ((row > 0)); then neighbors+=("$((pos - 4))"); fi
+    if ((row < 3)); then neighbors+=("$((pos + 4))"); fi
+    if ((col > 0)); then neighbors+=("$((pos - 1))"); fi
+    if ((col < 3)); then neighbors+=("$((pos + 1))"); fi
+}
+
+print_board() {
+    local row col value index
+    for ((row = 0; row < 4; row++)); do
+        printf '+----+----+----+----+\n|'
+        for ((col = 0; col < 4; col++)); do
+            index=$((row * 4 + col))
+            value=${board[index]}
+            if ((value == 0)); then
+                printf '    |'
+            else
+                printf ' %2d |' "$value"
+            fi
+        done
+        printf '\n'
+    done
+    printf '+----+----+----+----+\n'
+}
+
+is_solved() {
+    local i
+    for ((i = 0; i < 15; i++)); do
+        if ((board[i] != i + 1)); then
+            return 1
+        fi
+    done
+    ((board[15] == 0))
+}
+
+show_available_moves() {
+    local index text
+    local allowed=()
+    get_neighbors "$empty"
+    for index in "${neighbors[@]}"; do
+        allowed+=("${board[index]}")
+    done
+    printf -v text '%s, ' "${allowed[@]}"
+    printf 'Можно выбрать: %s\n\n' "${text%, }"
+}
+
+shuffles=${PUZZLE_SHUFFLES:-160}
+if [[ ! $shuffles =~ ^[1-9][0-9]*$ ]] || ((shuffles > 10000)); then
+    printf 'Ошибка: PUZZLE_SHUFFLES должно быть от 1 до 10000.\n' >&2
+    exit 2
+fi
+
+while true; do
+    board=(1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 0)
+    empty=15
+    previous_empty=-1
+
+    for ((step = 0; step < shuffles; step++)); do
+        get_neighbors "$empty"
+        choices=()
+        for index in "${neighbors[@]}"; do
+            if ((index != previous_empty)); then
+                choices+=("$index")
+            fi
+        done
+        index=${choices[$((RANDOM % ${#choices[@]}))]}
+        board[empty]=${board[index]}
+        board[index]=0
+        previous_empty=$empty
+        empty=$index
+    done
+    if ! is_solved; then break; fi
+done
+
+turn=1
+while true; do
+    printf '\nХод № %d\n' "$turn"
+    print_board
+
+    if ! IFS= read -r -p 'Ваш ход (q - выход): ' choice; then
+        printf '\nВвод завершён.\n'
+        exit 1
+    fi
+
+    if [[ $choice == q || $choice == Q ]]; then
+        printf 'Игра завершена. Совершено ходов: %d.\n' "$moves"
+        exit 0
+    fi
+
+    if [[ ! $choice =~ ^([1-9]|1[0-5])$ ]]; then
+        printf 'Неверный ввод! Введите число от 1 до 15 или q.\n'
+        show_available_moves
+        continue
+    fi
+
+    get_neighbors "$empty"
+    target=-1
+    for index in "${neighbors[@]}"; do
+        if [[ ${board[index]} == "$choice" ]]; then
+            target=$index
+            break
+        fi
+    done
+
+    if ((target == -1)); then
+        printf 'Неверный ход! Невозможно костяшку %s передвинуть на пустую ячейку.\n' "$choice"
+        show_available_moves
+        continue
+    fi
+
+    board[empty]=${board[target]}
+    board[target]=0
+    empty=$target
+    ((moves += 1))
+
+    if is_solved; then
+        printf '\nВы собрали головоломку за %d ходов.\n' "$moves"
+        print_board
+        exit 0
+    fi
+
+    ((turn += 1))
+done

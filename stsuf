@@ -1,0 +1,88 @@
+# Task 8
+
+if ((BASH_VERSINFO[0] < 4)); then
+    if command -v brew >/dev/null 2>&1; then
+        newer_bash="$(brew --prefix)/bin/bash"
+
+        if [[ -x $newer_bash ]]; then
+            exec "$newer_bash" "$0" "$@"
+        fi
+    fi
+
+    printf 'Ошибка: нужен Bash 4 или новее. На macOS установите: brew install bash\n' >&2
+    exit 1
+fi
+
+if (($# != 1)); then
+    printf 'Использование: %s каталог\n' "$0" >&2
+    exit 1
+fi
+
+if [[ ! -d $1 ]]; then
+    printf 'Ошибка: каталог не найден: %s\n' "$1" >&2
+    exit 1
+fi
+
+absdir=$(cd "$1" && pwd -P) || exit 1
+
+listfile=$(mktemp) || exit 1
+
+trap 'rm -f "$listfile"' EXIT
+
+find "$absdir" -type f -print0 > "$listfile" || exit 1
+
+declare -A counts=()
+
+total=0
+
+while IFS= read -r -d '' file; do
+
+    name=${file##*/}
+
+    prefix=${name%.*}
+    ending=${name##*.}
+
+    if [[ $name == *.* && -n $prefix && -n $ending ]]; then
+        suffix=".$ending"
+    else
+        suffix='no suffix'
+    fi
+
+    if [[ -n ${counts["$suffix"]+x} ]]; then
+        counts["$suffix"]=$((counts["$suffix"] + 1))
+    else
+        counts["$suffix"]=1
+    fi
+
+    ((total += 1))
+
+done < "$listfile"
+
+if ((total == 0)); then
+    printf 'Регулярных файлов не найдено.\n'
+    exit 0
+fi
+
+suffixes=("${!counts[@]}")
+
+for ((i = 0; i < ${#suffixes[@]}; i++)); do
+
+    max=$i
+
+    for ((j = i + 1; j < ${#suffixes[@]}; j++)); do
+
+        if ((counts["${suffixes[j]}"] > counts["${suffixes[max]}"])); then
+            max=$j
+        fi
+
+    done
+
+    tmp=${suffixes[i]}
+    suffixes[i]=${suffixes[max]}
+    suffixes[max]=$tmp
+
+done
+
+for suffix in "${suffixes[@]}"; do
+    printf '%s: %d\n' "$suffix" "${counts["$suffix"]}"
+done

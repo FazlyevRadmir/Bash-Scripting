@@ -1,0 +1,46 @@
+# Task 9
+
+set -e
+
+if [[ $# -ne 1 ]]; then
+    printf 'Использование: %s каталог\n' "$0" >&2
+    exit 1
+fi
+
+dirpath=$1
+
+if [[ ! -d $dirpath ]]; then
+    printf 'Ошибка: каталог не найден: %s\n' "$dirpath" >&2
+    exit 1
+fi
+
+username=$(id -un)
+today=$(date '+%Y-%m-%d')
+
+header="Approved $username $today"
+
+shopt -s nullglob dotglob
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/addline.XXXXXX") || exit 1
+
+trap 'rm -f "$tmp"' EXIT
+
+processed=0
+
+for file in "$dirpath"/*.txt; do
+
+    [[ -f $file && ! -L $file ]] || continue
+
+    printf '%s\n' "$header" > "$tmp"
+
+    cat "$file" >> "$tmp"
+
+    cat "$tmp" > "$file"
+
+    printf 'Обработан: %s\n' "$file"
+
+    ((processed += 1))
+
+done
+
+printf 'Готово. Обработано файлов: %d\n' "$processed"
